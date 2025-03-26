@@ -1,12 +1,73 @@
 #include <iostream>
-#include <cstdio>
-#include <cstdlib>
+#include <vector>
+#include <string>
+#include <set>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <algorithm>
 #include "lexer.h"
 
 using namespace std;
 
-// read grammar
-void ReadGrammar() {
+// grammar rule struct
+struct Rule {
+    string LHS;
+    vector<string> RHS;
+};
+
+// read the grammar from input
+vector<Rule> ReadGrammar() {
+    vector<Rule> rules;
+    LexicalAnalyzer lexer;
+    Token token = lexer.GetToken();
+
+    while (token.token_type != HASH) {
+        // parse left hand side
+        if (token.token_type != ID) {
+            cout << "SYNTAX ERROR !!!!!!!!!!!!!!!" << endl;
+            exit(1);
+        }
+
+        string lhs = token.lexeme;
+        token = lexer.GetToken();
+
+        if (token.token_type != ARROW) {
+            cout << "SYNTAX ERROR !!!!!!!!!!!!!!!" << endl;
+            exit(1);
+        }
+
+        // parse right hand side
+        do {
+            vector<string> rhs;
+            token = lexer.GetToken();
+
+            // handle epsilon (empty right side)
+            if (token.token_type == STAR || token.token_type == OR) {
+                // empty
+            } else {
+                // parse ID list
+                while (token.token_type == ID) {
+                    rhs.push_back(token.lexeme);
+                    token = lexer.GetToken();
+                }
+            }
+
+            // add rule to grammar
+            rules.push_back({lhs, rhs});
+
+            if (token.token_type == STAR) {
+                break; // end of rule
+            } else if (token.token_type != OR) {
+                cout << "SYNTAX ERROR !!!!!!!!!!!!!!!" << endl;
+                exit(1);
+            }
+        } while (true);
+
+        token = lexer.GetToken();
+    }
+
+    return rules;
 }
 
 /*
@@ -14,16 +75,136 @@ void ReadGrammar() {
  * Printing the terminals, then nonterminals of grammar in appearing order
  * output is one line, and all names are space delineated
 */
-void Task1()
-{
+void Task1(const vector<Rule>& rules) {
+    // set for efficient lookups
+    unordered_set<string> nonTerminalSet;
+    // store all terminals and nonterminals in order of first appearance
+    vector<string> allSymbols;
+    vector<string> terminals;
+    vector<string> nonTerminals;
+
+    // collect all nonterminals (from LHS)
+    for (const Rule& rule : rules) {
+        nonTerminalSet.insert(rule.LHS);
+    }
+
+    // collect all symbols in their order of appearance
+    for (const Rule& rule : rules) {
+        // first check LHS (nonterminal)
+        if (find(allSymbols.begin(), allSymbols.end(), rule.LHS) == allSymbols.end()) {
+            allSymbols.push_back(rule.LHS);
+        }
+
+        // check RHS
+        for (const string& symbol : rule.RHS) {
+            if (find(allSymbols.begin(), allSymbols.end(), symbol) == allSymbols.end()) {
+                allSymbols.push_back(symbol);
+            }
+        }
+    }
+
+    // separate terminals and nonterminals while preserving order
+    for (const string& symbol : allSymbols) {
+        if (nonTerminalSet.find(symbol) != nonTerminalSet.end()) {
+            nonTerminals.push_back(symbol);
+        } else {
+            terminals.push_back(symbol);
+        }
+    }
+
+    // print terminals followed by nonterminals
+    for (const string& t : terminals) {
+        cout << t << " ";
+    }
+
+    for (const string& nt : nonTerminals) {
+        cout << nt << " ";
+    }
+
 }
 
 /*
  * Task 2:
  * Print out nullable set of the grammar in specified format.
 */
-void Task2()
-{
+void Task2(const vector<Rule>& rules) {
+    // identify nonterminals in grammar appearance order
+    unordered_set<string> nonTerminalSet;
+    vector<string> orderedNonTerminals;
+
+    // identify all nonterminals from LHS
+    for (const Rule& rule : rules) {
+        nonTerminalSet.insert(rule.LHS);
+    }
+
+    // collect all symbols in their order of appearance
+    vector<string> allSymbols;
+    for (const Rule& rule : rules) {
+        // LHS
+        if (find(allSymbols.begin(), allSymbols.end(), rule.LHS) == allSymbols.end()) {
+            allSymbols.push_back(rule.LHS);
+        }
+
+        // RHS
+        for (const string& symbol : rule.RHS) {
+            if (find(allSymbols.begin(), allSymbols.end(), symbol) == allSymbols.end()) {
+                allSymbols.push_back(symbol);
+            }
+        }
+    }
+
+    // extract ordered nonterminals
+    for (const string& symbol : allSymbols) {
+        if (nonTerminalSet.find(symbol) != nonTerminalSet.end()) {
+            orderedNonTerminals.push_back(symbol);
+        }
+    }
+
+    // calculate nullable nonterminals
+    bool changed = true;
+    unordered_set<string> nullable;
+
+    // add all nonterminals with epsilon rules
+    for (const Rule& rule : rules) {
+        if (rule.RHS.empty()) {
+            nullable.insert(rule.LHS);
+        }
+    }
+
+    // apply rule 2 until no change
+    while (changed) {
+        changed = false;
+        for (const Rule& rule : rules) {
+            if (nullable.find(rule.LHS) != nullable.end()) {
+                continue; // nullable
+            }
+
+            bool allNullable = true;
+            for (const string& symbol : rule.RHS) {
+                if (nullable.find(symbol) == nullable.end()) {
+                    allNullable = false;
+                    break;
+                }
+            }
+
+            if (allNullable && !rule.RHS.empty()) {
+                nullable.insert(rule.LHS);
+                changed = true;
+            }
+        }
+    }
+
+    // print nullable nonterminals in order of appearance
+    cout << "Nullable = {";
+    bool first = true;
+    for (const string& nt : orderedNonTerminals) {
+        if (nullable.find(nt) != nullable.end()) {
+            if (!first) cout << ",";
+            cout << " " << nt;
+            first = false;
+        }
+    }
+    cout << " }";
 }
 
 // Task 3: FIRST sets
@@ -63,15 +244,15 @@ int main (int argc, char* argv[])
 
     task = atoi(argv[1]);
 
-    ReadGrammar();  // Reads the input grammar from standard input
+    vector<Rule> rules = ReadGrammar();  // Reads the input grammar from standard input
     // and represent it internally in data structures
     // ad described in project 2 presentation file
 
     switch (task) {
-        case 1: Task1();
+        case 1: Task1(rules);
         break;
 
-        case 2: Task2();
+        case 2: Task2(rules);
         break;
 
         case 3: Task3();
