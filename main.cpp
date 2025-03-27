@@ -573,13 +573,295 @@ void Task4(const vector<Rule>& rules) {
 }
 
 // Task 5: left factoring
-void Task5()
-{
+void Task5(const vector<Rule>& rules) {
+    // find nonterminals
+    unordered_set<string> nonTerminalSet;
+    for (const Rule& rule : rules) {
+        nonTerminalSet.insert(rule.LHS);
+    }
+
+    // LHS
+    unordered_map<string, vector<Rule>> rulesByLHS;
+    for (const Rule& rule : rules) {
+        rulesByLHS[rule.LHS].push_back(rule);
+    }
+
+    vector<Rule> newRules;
+    unordered_map<string, int> newNonTermCounts;
+
+    // process each nonterminal
+    for (const auto& pair : rulesByLHS) {
+        const string& nt = pair.first;
+        vector<Rule> currRules = pair.second; // make a copy
+        vector<Rule> factored;
+
+        // keep factoring until no more common prefixes are found
+        bool changed = true;
+        while (changed && !currRules.empty()) {
+            changed = false;
+
+            // find the longest common prefix
+            int maxPrefixLen = 0;
+            vector<string> maxPrefix;
+            vector<int> rulesToFactor;
+
+            for (size_t i = 0; i < currRules.size(); i++) {
+                for (size_t j = i + 1; j < currRules.size(); j++) {
+                    // fimd common prefix length
+                    int prefixLen = 0;
+                    while (prefixLen < currRules[i].RHS.size() &&
+                           prefixLen < currRules[j].RHS.size() &&
+                           currRules[i].RHS[prefixLen] == currRules[j].RHS[prefixLen]) {
+                        prefixLen++;
+                    }
+
+                    if (prefixLen > 0 && prefixLen > maxPrefixLen) {
+                        maxPrefixLen = prefixLen;
+                        maxPrefix = vector<string>(currRules[i].RHS.begin(),
+                                                 currRules[i].RHS.begin() + prefixLen);
+                        rulesToFactor.clear();
+                        rulesToFactor.push_back(i);
+                        rulesToFactor.push_back(j);
+                    } else if (prefixLen == maxPrefixLen && prefixLen > 0) {
+                        // check if same prefix
+                        bool samePrefix = true;
+                        for (int k = 0; k < prefixLen; k++) {
+                            if (currRules[i].RHS[k] != maxPrefix[k]) {
+                                samePrefix = false;
+                                break;
+                            }
+                        }
+
+                        if (samePrefix && find(rulesToFactor.begin(), rulesToFactor.end(), i) == rulesToFactor.end()) {
+                            rulesToFactor.push_back(i);
+                        }
+
+                        samePrefix = true;
+                        for (int k = 0; k < prefixLen; k++) {
+                            if (currRules[j].RHS[k] != maxPrefix[k]) {
+                                samePrefix = false;
+                                break;
+                            }
+                        }
+
+                        if (samePrefix && find(rulesToFactor.begin(), rulesToFactor.end(), j) == rulesToFactor.end()) {
+                            rulesToFactor.push_back(j);
+                        }
+                    }
+                }
+            }
+
+            // find all rules same prefix
+            if (maxPrefixLen > 0) {
+                for (size_t i = 0; i < currRules.size(); i++) {
+                    if (find(rulesToFactor.begin(), rulesToFactor.end(), i) != rulesToFactor.end()) {
+                        continue; // alreaddy in list
+                    }
+
+                    if (currRules[i].RHS.size() >= maxPrefixLen) {
+                        bool matchPrefix = true;
+                        for (int j = 0; j < maxPrefixLen; j++) {
+                            if (currRules[i].RHS[j] != maxPrefix[j]) {
+                                matchPrefix = false;
+                                break;
+                            }
+                        }
+
+                        if (matchPrefix) {
+                            rulesToFactor.push_back(i);
+                        }
+                    }
+                }
+
+                // new nonterminal
+                string newNT = nt + to_string(++newNonTermCounts[nt]);
+
+                vector<string> newRHSPrefix = maxPrefix;
+                newRHSPrefix.push_back(newNT);
+                factored.push_back({nt, newRHSPrefix});
+
+                for (int ruleIdx : rulesToFactor) {
+                    vector<string> suffix;
+                    if (currRules[ruleIdx].RHS.size() > maxPrefixLen) {
+                        suffix.insert(suffix.end(),
+                                     currRules[ruleIdx].RHS.begin() + maxPrefixLen,
+                                     currRules[ruleIdx].RHS.end());
+                    }
+                    factored.push_back({newNT, suffix});
+                }
+
+                vector<Rule> remaining;
+                for (size_t i = 0; i < currRules.size(); i++) {
+                    if (find(rulesToFactor.begin(), rulesToFactor.end(), i) == rulesToFactor.end()) {
+                        remaining.push_back(currRules[i]);
+                    }
+                }
+
+                currRules = remaining;
+                changed = true;
+            }
+        }
+
+        // add remaining unfactored rules
+        factored.insert(factored.end(), currRules.begin(), currRules.end());
+
+        // add all factored rules for this nonterminal
+        newRules.insert(newRules.end(), factored.begin(), factored.end());
+    }
+
+    // sort rules
+    sort(newRules.begin(), newRules.end(), [](const Rule& a, const Rule& b) {
+        // LHS
+        if (a.LHS != b.LHS) {
+            return a.LHS < b.LHS;
+        }
+
+        // RHS
+        size_t minSize = min(a.RHS.size(), b.RHS.size());
+        for (size_t i = 0; i < minSize; i++) {
+            if (a.RHS[i] != b.RHS[i]) {
+                return a.RHS[i] < b.RHS[i];
+            }
+        }
+
+        return a.RHS.size() < b.RHS.size();
+    });
+
+    // print] the grammar
+    for (const Rule& rule : newRules) {
+        cout << rule.LHS << " -> ";
+        for (const string& symbol : rule.RHS) {
+            cout << symbol << " ";
+        }
+        cout << "#" << endl;
+    }
 }
 
 // Task 6: eliminate left recursion
-void Task6()
-{
+void Task6(const vector<Rule>& rules) {
+    // nonterminals
+    unordered_set<string> nonTerminalSet;
+    vector<string> nonTerminals;
+
+    for (const Rule& rule : rules) {
+        if (nonTerminalSet.find(rule.LHS) == nonTerminalSet.end()) {
+            nonTerminalSet.insert(rule.LHS);
+            nonTerminals.push_back(rule.LHS);
+        }
+    }
+
+    // sort nonterminals
+    sort(nonTerminals.begin(), nonTerminals.end());
+
+    unordered_map<string, vector<Rule>> rulesByLHS;
+    for (const Rule& rule : rules) {
+        rulesByLHS[rule.LHS].push_back(rule);
+    }
+
+    unordered_map<string, vector<Rule>> newRulesByLHS;
+
+    for (size_t i = 0; i < nonTerminals.size(); i++) {
+        string Ai = nonTerminals[i];
+        vector<Rule> currentRules = rulesByLHS[Ai];
+
+        // elim indirect left recursion
+        for (size_t j = 0; j < i; j++) {
+            string Aj = nonTerminals[j];
+
+            vector<Rule> updatedRules;
+            for (const Rule& rule : currentRules) {
+                if (!rule.RHS.empty() && rule.RHS[0] == Aj) {
+                    vector<string> gamma(rule.RHS.begin() + 1, rule.RHS.end());
+
+                    for (const Rule& ajRule : newRulesByLHS[Aj]) {
+                        vector<string> newRHS = ajRule.RHS;
+                        newRHS.insert(newRHS.end(), gamma.begin(), gamma.end());
+                        updatedRules.push_back({Ai, newRHS});
+                    }
+                } else {
+                    updatedRules.push_back(rule);
+                }
+            }
+
+            currentRules = updatedRules;
+        }
+
+        // elim direct left recursion
+        vector<Rule> alphaRules; // rules starting with Ai (recursive)
+        vector<Rule> betaRules;  // rules not starting with Ai (non-recursive)
+
+        for (const Rule& rule : currentRules) {
+            if (!rule.RHS.empty() && rule.RHS[0] == Ai) {
+                // This rule has the form Ai -> Ai alpha
+                alphaRules.push_back(rule);
+            } else {
+                // This rule has the form Ai -> beta
+                betaRules.push_back(rule);
+            }
+        }
+
+        if (alphaRules.empty()) {
+            // no direct left recursion
+            newRulesByLHS[Ai] = currentRules;
+        } else {
+            // new nonterminal Ai1
+            string Ai1 = Ai + "1";
+
+            // rewrite rules
+            vector<Rule> aiRules;
+            vector<Rule> ai1Rules;
+
+            for (const Rule& rule : betaRules) {
+                vector<string> newRHS = rule.RHS;
+                newRHS.push_back(Ai1);
+                aiRules.push_back({Ai, newRHS});
+            }
+
+            for (const Rule& rule : alphaRules) {
+                vector<string> alpha(rule.RHS.begin() + 1, rule.RHS.end());
+                alpha.push_back(Ai1);
+                ai1Rules.push_back({Ai1, alpha});
+            }
+
+            // add epsilon rule for Ai1
+            ai1Rules.push_back({Ai1, vector<string>()});
+
+            newRulesByLHS[Ai] = aiRules;
+            newRulesByLHS[Ai1] = ai1Rules;
+        }
+    }
+
+    // combine all rules, sort
+    vector<Rule> allRules;
+    for (const auto& pair : newRulesByLHS) {
+        allRules.insert(allRules.end(), pair.second.begin(), pair.second.end());
+    }
+
+    sort(allRules.begin(), allRules.end(), [](const Rule& a, const Rule& b) {
+        // LHS
+        if (a.LHS != b.LHS) {
+            return a.LHS < b.LHS;
+        }
+
+        // RHS
+        int minSize = min(a.RHS.size(), b.RHS.size());
+        for (int i = 0; i < minSize; i++) {
+            if (a.RHS[i] != b.RHS[i]) {
+                return a.RHS[i] < b.RHS[i];
+            }
+        }
+
+        return a.RHS.size() < b.RHS.size();
+    });
+
+    // pint the grammar
+    for (const Rule& rule : allRules) {
+        cout << rule.LHS << " -> ";
+        for (const string& symbol : rule.RHS) {
+            cout << symbol << " ";
+        }
+        cout << "#" << endl;
+    }
 }
 
 int main (int argc, char* argv[])
@@ -616,10 +898,10 @@ int main (int argc, char* argv[])
         case 4: Task4(rules);
         break;
 
-        case 5: Task5();
+        case 5: Task5(rules);
         break;
 
-        case 6: Task6();
+        case 6: Task6(rules);
         break;
 
         default:
