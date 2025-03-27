@@ -1,0 +1,47 @@
+name: C++ Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Compile C++ Program
+        run: |
+          # Compile with C++17 standard
+          g++ -std=c++17 *.cpp
+          if [ $? -ne 0 ]; then
+            echo "Compilation failed"
+            exit 1
+          fi
+
+      - name: Run test 1
+        run: |
+          ./test_p2.sh 1
+
+      - name: Run test 2
+        run: |
+          ./test_p2.sh 2
+
+      - name: Run test 3
+        run: |
+          ./test_p2.sh 3
+
+      - name: Run test 4
+        run: |
+          ./test_p2.sh 4
+
+      - name: Run test 5
+        run: |
+          ./test_p2.sh 5
+
+      - name: Run test 6
+        run: |
+          ./test_p2.sh 6
