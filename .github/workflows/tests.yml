@@ -31,31 +31,36 @@ jobs:
           # Run all 6 test suites
           for i in {1..6}; do
             echo "Running test suite $i"
-            ./test_p2.sh $i
-            
-            # Get the number of tests run and passed from the output
             test_output=$(./test_p2.sh $i)
-            tests_run=$(echo "$test_output" | grep -o "Passed [0-9]* tests out of [0-9]*" | awk '{print $5}')
-            tests_passed=$(echo "$test_output" | grep -o "Passed [0-9]* tests" | awk '{print $2}')
+            echo "$test_output"
             
-            # Update counters
-            tests_in_suite=$tests_run
-            failed_in_suite=$((tests_in_suite - tests_passed))
-            
-            total_tests=$((total_tests + tests_in_suite))
-            failed_tests=$((failed_tests + failed_in_suite))
-            
-            echo "Test suite $i: $tests_passed passed out of $tests_in_suite tests"
+            # Extract the number of tests passed and total from the final line
+            if echo "$test_output" | grep -q "Passed .* tests out of .* for task"; then
+              tests_passed=$(echo "$test_output" | grep "Passed .* tests out of .* for task" | sed -E 's/Passed ([0-9]+) tests out of ([0-9]+) for task.*/\1/')
+              tests_total=$(echo "$test_output" | grep "Passed .* tests out of .* for task" | sed -E 's/Passed ([0-9]+) tests out of ([0-9]+) for task.*/\2/')
+              
+              # Calculate failures for this suite
+              suite_failures=$((tests_total - tests_passed))
+              
+              # Update totals
+              total_tests=$((total_tests + tests_total))
+              failed_tests=$((failed_tests + suite_failures))
+              
+              echo "Test suite $i: $tests_passed passed out of $tests_total tests ($suite_failures failed)"
+            else
+              echo "Warning: Could not parse test results for suite $i"
+            fi
           done
           
           # Report final counts
+          echo "==============================================="
           echo "Total tests run: $total_tests"
           echo "Total tests failed: $failed_tests"
           
           # Fail the job if 4 or more tests failed
           if [ $failed_tests -ge 4 ]; then
-            echo "Failing job: $failed_tests tests failed (threshold is 4)"
+            echo "❌ Failing job: $failed_tests tests failed (threshold is 4)"
             exit 1
           else
-            echo "Job passed: $failed_tests tests failed (below threshold of 4)"
+            echo "✅ Job passed: $failed_tests tests failed (below threshold of 4)"
           fi
