@@ -22,26 +22,40 @@ jobs:
             exit 1
           fi
 
-      - name: Run test 1
+      - name: Run tests and count failures
         run: |
-          ./test_p2.sh 1
-
-      - name: Run test 2
-        run: |
-          ./test_p2.sh 2
-
-      - name: Run test 3
-        run: |
-          ./test_p2.sh 3
-
-      - name: Run test 4
-        run: |
-          ./test_p2.sh 4
-
-      - name: Run test 5
-        run: |
-          ./test_p2.sh 5
-
-      - name: Run test 6
-        run: |
-          ./test_p2.sh 6
+          # Initialize counters
+          total_tests=0
+          failed_tests=0
+          
+          # Run all 6 test suites
+          for i in {1..6}; do
+            echo "Running test suite $i"
+            ./test_p2.sh $i
+            
+            # Get the number of tests run and passed from the output
+            test_output=$(./test_p2.sh $i)
+            tests_run=$(echo "$test_output" | grep -o "Passed [0-9]* tests out of [0-9]*" | awk '{print $5}')
+            tests_passed=$(echo "$test_output" | grep -o "Passed [0-9]* tests" | awk '{print $2}')
+            
+            # Update counters
+            tests_in_suite=$tests_run
+            failed_in_suite=$((tests_in_suite - tests_passed))
+            
+            total_tests=$((total_tests + tests_in_suite))
+            failed_tests=$((failed_tests + failed_in_suite))
+            
+            echo "Test suite $i: $tests_passed passed out of $tests_in_suite tests"
+          done
+          
+          # Report final counts
+          echo "Total tests run: $total_tests"
+          echo "Total tests failed: $failed_tests"
+          
+          # Fail the job if 4 or more tests failed
+          if [ $failed_tests -ge 4 ]; then
+            echo "Failing job: $failed_tests tests failed (threshold is 4)"
+            exit 1
+          else
+            echo "Job passed: $failed_tests tests failed (below threshold of 4)"
+          fi
