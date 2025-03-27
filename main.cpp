@@ -352,8 +352,224 @@ void Task3(const vector<Rule>& rules) {
 }
 
 // Task 4: FOLLOW sets
-void Task4()
-{
+void Task4(const vector<Rule>& rules) {
+
+    // track nonterminals in order in the grammar
+    vector<string> orderedNonTerminals;
+    unordered_set<string> nonTerminalSet;
+
+    // track terminals in order
+    vector<string> orderedTerminals;
+    unordered_set<string> terminalSet;
+
+    // find start symbol
+    string startSymbol = rules[0].LHS;
+
+    // add start symbol first
+    orderedNonTerminals.push_back(startSymbol);
+    nonTerminalSet.insert(startSymbol);
+
+    // find all nonterminals and terminals in order
+    for (const Rule& rule : rules) {
+        // add LHS if not already added
+        if (nonTerminalSet.find(rule.LHS) == nonTerminalSet.end()) {
+            orderedNonTerminals.push_back(rule.LHS);
+            nonTerminalSet.insert(rule.LHS);
+        }
+
+        // process RHS
+        for (const string& symbol : rule.RHS) {
+            // chcek if it's a nonterminal by looking if it's in LHS
+            bool isNonTerminal = false;
+            for (const Rule& r : rules) {
+                if (r.LHS == symbol) {
+                    isNonTerminal = true;
+                    break;
+                }
+            }
+
+            if (isNonTerminal) {
+                // nonterminal
+                if (nonTerminalSet.find(symbol) == nonTerminalSet.end()) {
+                    orderedNonTerminals.push_back(symbol);
+                    nonTerminalSet.insert(symbol);
+                }
+            } else {
+                // terminal
+                if (terminalSet.find(symbol) == terminalSet.end()) {
+                    orderedTerminals.push_back(symbol);
+                    terminalSet.insert(symbol);
+                }
+            }
+        }
+    }
+
+    // nullable nonterminals
+    unordered_set<string> nullable;
+    bool changed = true;
+
+    // add nonterminals with epsilon rules
+    for (const Rule& rule : rules) {
+        if (rule.RHS.empty()) {
+            nullable.insert(rule.LHS);
+        }
+    }
+
+    // apply nullable calculation until no change
+    while (changed) {
+        changed = false;
+        for (const Rule& rule : rules) {
+            if (nullable.find(rule.LHS) != nullable.end()) {
+                continue; // already nullable
+            }
+
+            bool allNullable = true;
+            for (const string& symbol : rule.RHS) {
+                if (nonTerminalSet.find(symbol) == nonTerminalSet.end() ||
+                    nullable.find(symbol) == nullable.end()) {
+                    allNullable = false;
+                    break;
+                }
+            }
+
+            if (allNullable && !rule.RHS.empty()) {
+                nullable.insert(rule.LHS);
+                changed = true;
+            }
+        }
+    }
+
+    // FIRST sets
+    unordered_map<string, set<string>> FIRST;
+
+    // terminals, FIRST(a) = {a}
+    for (const string& symbol : orderedTerminals) {
+        FIRST[symbol].insert(symbol);
+    }
+
+    // FIRST sets for nonterminals
+    changed = true;
+    while (changed) {
+        changed = false;
+
+        for (const Rule& rule : rules) {
+            if (rule.RHS.empty()) continue;
+
+            size_t i = 0;
+            bool shouldContinue = true;
+
+            while (i < rule.RHS.size() && shouldContinue) {
+                shouldContinue = false;
+                const string& symbol = rule.RHS[i];
+
+                if (nonTerminalSet.find(symbol) == nonTerminalSet.end()) {
+                    // terminal symbol
+                    if (FIRST[rule.LHS].insert(symbol).second) {
+                        changed = true;
+                    }
+                } else {
+                    // nonterminal symbol add its FIRST set
+                    for (const string& firstSym : FIRST[symbol]) {
+                        if (FIRST[rule.LHS].insert(firstSym).second) {
+                            changed = true;
+                        }
+                    }
+
+                    if (nullable.find(symbol) != nullable.end()) {
+                        shouldContinue = true;
+                    }
+                }
+
+                i++;
+            }
+        }
+    }
+
+    // FOLLOW sets
+    unordered_map<string, set<string>> FOLLOW;
+
+    // add $ to FOLLOW(S) (the start symbol)
+    FOLLOW[startSymbol].insert("$");
+
+    // apply rules for FOLLOW sets
+    changed = true;
+    while (changed) {
+        changed = false;
+
+        for (const Rule& rule : rules) {
+            for (size_t i = 0; i < rule.RHS.size(); i++) {
+                const string& B = rule.RHS[i]; // cur symbol
+
+                // only  nonterminals
+                if (nonTerminalSet.find(B) == nonTerminalSet.end()) {
+                    continue;
+                }
+
+                if (i + 1 < rule.RHS.size()) {
+                    size_t j = i + 1;
+                    bool allNullable = true;
+
+                    while (j < rule.RHS.size()) {
+                        const string& nextSymbol = rule.RHS[j];
+
+                        // add FIRST(nextSymbol) to FOLLOW(B)
+                        for (const string& symbol : FIRST[nextSymbol]) {
+                            if (FOLLOW[B].insert(symbol).second) {
+                                changed = true;
+                            }
+                        }
+
+                        if (nullable.find(nextSymbol) == nullable.end()) {
+                            allNullable = false;
+                            break;
+                        }
+
+                        j++;
+                    }
+
+                    // if all symbols after B are nullable, add FOLLOW(A) to FOLLOW(B)
+                    if (allNullable) {
+                        for (const string& symbol : FOLLOW[rule.LHS]) {
+                            if (FOLLOW[B].insert(symbol).second) {
+                                changed = true;
+                            }
+                        }
+                    }
+                } else {
+                    for (const string& symbol : FOLLOW[rule.LHS]) {
+                        if (FOLLOW[B].insert(symbol).second) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // print the FOLLOW sets in the expected order
+    for (const string& nt : orderedNonTerminals) {
+        cout << "FOLLOW(" << nt << ") = { ";
+
+        // print symbols in order
+        bool first = true;
+
+        // print $ first
+        if (FOLLOW[nt].find("$") != FOLLOW[nt].end()) {
+            cout << "$";
+            first = false;
+        }
+
+        // print the rest of the terminals in order in the grammar
+        for (const string& t : orderedTerminals) {
+            if (FOLLOW[nt].find(t) != FOLLOW[nt].end()) {
+                if (!first) cout << ", ";
+                cout << t;
+                first = false;
+            }
+        }
+
+        cout << " }" << endl;
+    }
 }
 
 // Task 5: left factoring
@@ -397,7 +613,7 @@ int main (int argc, char* argv[])
         case 3: Task3(rules);
         break;
 
-        case 4: Task4();
+        case 4: Task4(rules);
         break;
 
         case 5: Task5();
