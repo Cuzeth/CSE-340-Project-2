@@ -208,8 +208,147 @@ void Task2(const vector<Rule>& rules) {
 }
 
 // Task 3: FIRST sets
-void Task3()
-{
+void Task3(const vector<Rule>& rules) {
+    // identify nonterminals in grammar appearance order
+    unordered_set<string> nonTerminalSet;
+    vector<string> orderedNonTerminals;
+    vector<string> orderedTerminals;
+    vector<string> allSymbols;
+
+    // collect all nonterminals from LHS
+    for (const Rule& rule : rules) {
+        nonTerminalSet.insert(rule.LHS);
+    }
+
+    // collect all symbols in their order of appearance
+    for (const Rule& rule : rules) {
+        // LHS (nonterminal)
+        if (find(allSymbols.begin(), allSymbols.end(), rule.LHS) == allSymbols.end()) {
+            allSymbols.push_back(rule.LHS);
+        }
+
+        // RHS
+        for (const string& symbol : rule.RHS) {
+            if (find(allSymbols.begin(), allSymbols.end(), symbol) == allSymbols.end()) {
+                allSymbols.push_back(symbol);
+            }
+        }
+    }
+
+    // separate terminals and nonterminals while preserving order
+    for (const string& symbol : allSymbols) {
+        if (nonTerminalSet.find(symbol) != nonTerminalSet.end()) {
+            orderedNonTerminals.push_back(symbol);
+        } else {
+            orderedTerminals.push_back(symbol);
+        }
+    }
+
+    // calculate nullable nonterminals
+    unordered_set<string> nullable;
+    bool changed = true;
+
+    // add all nonterminals with epsilon rules
+    for (const Rule& rule : rules) {
+        if (rule.RHS.empty()) {
+            nullable.insert(rule.LHS);
+        }
+    }
+
+    // apply nullable calculation until no change
+    while (changed) {
+        changed = false;
+        for (const Rule& rule : rules) {
+            if (nullable.find(rule.LHS) != nullable.end()) {
+                continue; // already nullable
+            }
+
+            bool allNullable = true;
+            for (const string& symbol : rule.RHS) {
+                if (nonTerminalSet.find(symbol) == nonTerminalSet.end() ||
+                    nullable.find(symbol) == nullable.end()) {
+                    allNullable = false;
+                    break;
+                }
+            }
+
+            if (allNullable && !rule.RHS.empty()) {
+                nullable.insert(rule.LHS);
+                changed = true;
+            }
+        }
+    }
+
+    // FIRST sets
+    unordered_map<string, set<string>> FIRST;
+
+    // for terminals, FIRST(a) = {a}
+    for (const string& t : orderedTerminals) {
+        FIRST[t].insert(t);
+    }
+
+    // FIRST sets for nonterminals
+    for (const string& nt : orderedNonTerminals) {
+        FIRST[nt] = set<string>();
+    }
+
+    // compute FIRST sets
+    changed = true;
+    while (changed) {
+        changed = false;
+
+        for (const Rule& rule : rules) {
+            // skip epsilon rules
+            if (rule.RHS.empty()) continue;
+
+            // for each position in RHS
+            size_t i = 0;
+            bool shouldContinue = true;
+
+            while (i < rule.RHS.size() && shouldContinue) {
+                shouldContinue = false;
+                const string& symbol = rule.RHS[i];
+
+                // if it's a terminal add it to FIRST(LHS)
+                if (nonTerminalSet.find(symbol) == nonTerminalSet.end()) {
+                    if (FIRST[rule.LHS].insert(symbol).second) {
+                        changed = true;
+                    }
+                } else {
+                    // if it's a nonterminal add FIRST(symbol) to FIRST(LHS)
+                    for (const string& firstSymbol : FIRST[symbol]) {
+                        if (FIRST[rule.LHS].insert(firstSymbol).second) {
+                            changed = true;
+                        }
+                    }
+
+                    // check if this nonterminal is nullable
+                    if (nullable.find(symbol) != nullable.end()) {
+                        shouldContinue = true;
+                    }
+                }
+
+                i++;
+            }
+        }
+    }
+
+    // print FIRST sets for nonterminals in order
+    for (const string& nt : orderedNonTerminals) {
+        cout << "FIRST(" << nt << ") = { ";
+        bool first = true;
+
+        // print terminals in order of appearance
+        for (const string& t : orderedTerminals) {
+            if (FIRST[nt].find(t) != FIRST[nt].end()) {
+                if (!first) cout << ", ";
+                cout << t;
+                first = false;
+            }
+        }
+
+        cout << " }" << endl;
+    }
 }
 
 // Task 4: FOLLOW sets
@@ -255,7 +394,7 @@ int main (int argc, char* argv[])
         case 2: Task2(rules);
         break;
 
-        case 3: Task3();
+        case 3: Task3(rules);
         break;
 
         case 4: Task4();
